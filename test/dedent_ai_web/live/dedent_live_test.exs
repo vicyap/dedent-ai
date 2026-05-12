@@ -91,6 +91,36 @@ defmodule DedentAiWeb.DedentLiveTest do
     assert html =~ "Trust field data over lab runs."
   end
 
+  test "ASCII box-drawing tables render as real HTML tables in preview", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/")
+
+    table = """
+    ┌──────────┬──────────┐
+    │   Check  │  Result  │
+    ├──────────┼──────────┤
+    │ Title    │ Done     │
+    └──────────┴──────────┘
+    """
+
+    view
+    |> form("#dedent_ai-form", dedent_ai: %{input: table})
+    |> render_change()
+
+    view
+    |> element("button[phx-value-view=preview]")
+    |> render_click()
+
+    html = element(view, "#dedent_ai-output-html") |> render()
+
+    assert html =~ "<table>"
+    assert html =~ "<th"
+    assert html =~ "Check"
+    assert html =~ "Result"
+    assert html =~ "<td"
+    assert html =~ "Title"
+    assert html =~ "Done"
+  end
+
   test "preview tab renders markdown output as HTML", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/")
 

@@ -12,13 +12,16 @@ defmodule DedentAi.Text do
   def clean(text), do: clean(text, smart: true)
 
   @doc """
-  Renders `text` (treated as Markdown) to an HTML string. Lines that look like
-  ASCII drawings (box-drawing chars, `★ Insight ───` rules) get wrapped in
-  fenced code blocks so they preview without mangling.
+  Renders `text` (treated as Markdown) to an HTML string. Box-drawing ASCII
+  tables get rewritten to Markdown tables first so they render as real
+  `<table>` elements instead of monospace dashes.
   """
   @spec to_html(binary()) :: binary()
   def to_html(text) when is_binary(text) do
-    case Earmark.as_html(text, escape: true, smartypants: false, compact_output: false) do
+    text
+    |> DedentAi.Tables.transform()
+    |> Earmark.as_html(escape: true, smartypants: false, compact_output: false, gfm_tables: true)
+    |> case do
       {:ok, html, _} -> html
       {:error, html, _} -> html
     end
@@ -30,7 +33,10 @@ defmodule DedentAi.Text do
   """
   @spec looks_like_markdown?(binary()) :: boolean()
   def looks_like_markdown?(text) when is_binary(text) do
-    String.match?(text, ~r/(^|\n)\s*(\#{1,6}\s|[-*+]\s|\d+[.)]\s|>\s|```|~~~|★\s*Insight)/u) or
+    String.match?(
+      text,
+      ~r/(^|\n)\s*(\#{1,6}\s|[-*+]\s|\d+[.)]\s|>\s|```|~~~|★\s*Insight|┌[─┬]+┐)/u
+    ) or
       String.match?(text, ~r/\*\*[^*\n]+\*\*|`[^`\n]+`|\[[^\]\n]+\]\([^)\n]+\)/u)
   end
 
