@@ -91,6 +91,55 @@ defmodule DedentAiWeb.DedentLiveTest do
     assert html =~ "Trust field data over lab runs."
   end
 
+  test "captures paste_dedented once when input transitions from empty to non-empty",
+       %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/")
+
+    view
+    |> form("#dedent_ai-form", dedent_ai: %{input: "● Hello world"})
+    |> render_change()
+
+    assert_push_event(view, "posthog:capture", %{event: "paste_dedented", props: props})
+    assert props.input_chars == String.length("● Hello world")
+    assert props.had_markers == true
+
+    view
+    |> form("#dedent_ai-form", dedent_ai: %{input: "● Hello world!"})
+    |> render_change()
+
+    refute_push_event(view, "posthog:capture", %{event: "paste_dedented"})
+  end
+
+  test "captures view_changed when switching tabs", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/")
+
+    view
+    |> form("#dedent_ai-form", dedent_ai: %{input: "## Heading"})
+    |> render_change()
+
+    view
+    |> element("button[phx-value-view=preview]")
+    |> render_click()
+
+    assert_push_event(view, "posthog:capture", %{
+      event: "view_changed",
+      props: %{to: "preview"}
+    })
+  end
+
+  test "captures filter_status_toggled when checkbox flips", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/")
+
+    view
+    |> form("#dedent_ai-form", dedent_ai: %{input: "x", filter_status: "false"})
+    |> render_change()
+
+    assert_push_event(view, "posthog:capture", %{
+      event: "filter_status_toggled",
+      props: %{enabled: false}
+    })
+  end
+
   test "ASCII box-drawing tables render as real HTML tables in preview", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/")
 

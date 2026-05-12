@@ -9,6 +9,7 @@ defmodule DedentAiWeb.DedentLive do
      socket
      |> assign(:output_view, :raw)
      |> assign(:filter_status, true)
+     |> assign(:last_input_empty?, true)
      |> assign_text("")}
   end
 
@@ -16,11 +17,16 @@ defmodule DedentAiWeb.DedentLive do
   def handle_event("update", %{"dedent_ai" => params}, socket) when is_map(params) do
     input = Map.get(params, "input", "")
     filter_status = Map.get(params, "filter_status", "true") == "true"
+    previous_filter = socket.assigns.filter_status
 
-    {:noreply,
-     socket
-     |> assign(:filter_status, filter_status)
-     |> assign_text(input)}
+    socket =
+      socket
+      |> assign(:filter_status, filter_status)
+      |> assign_text(input)
+      |> maybe_capture_paste(input)
+      |> maybe_capture_filter_toggle(previous_filter, filter_status)
+
+    {:noreply, socket}
   end
 
   def handle_event("update", _params, socket) do
@@ -28,11 +34,52 @@ defmodule DedentAiWeb.DedentLive do
   end
 
   def handle_event("clear", _params, socket) do
-    {:noreply, assign_text(socket, "")}
+    {:noreply,
+     socket
+     |> assign(:last_input_empty?, true)
+     |> assign_text("")}
   end
 
   def handle_event("set_view", %{"view" => view}, socket) when view in ~w(raw preview) do
-    {:noreply, assign(socket, :output_view, String.to_existing_atom(view))}
+    view_atom = String.to_existing_atom(view)
+
+    {:noreply,
+     socket
+     |> assign(:output_view, view_atom)
+     |> capture("view_changed", %{to: view})}
+  end
+
+  defp maybe_capture_paste(socket, input) do
+    if socket.assigns.last_input_empty? and input != "" do
+      socket
+      |> assign(:last_input_empty?, false)
+      |> capture("paste_dedented", paste_props(socket, input))
+    else
+      assign(socket, :last_input_empty?, input == "")
+    end
+  end
+
+  defp maybe_capture_filter_toggle(socket, previous, current) when previous != current do
+    capture(socket, "filter_status_toggled", %{enabled: current})
+  end
+
+  defp maybe_capture_filter_toggle(socket, _, _), do: socket
+
+  defp paste_props(socket, input) do
+    %{
+      input_chars: String.length(input),
+      input_lines: socket.assigns.input_lines,
+      output_chars: socket.assigns.output_chars,
+      had_markers: input != socket.assigns.output and String.contains?(input, ["●", "•"]),
+      had_status_lines: String.contains?(input, "✻"),
+      had_insights: length(socket.assigns.insights),
+      had_table: String.contains?(input, "┌"),
+      markdown?: socket.assigns.markdown?
+    }
+  end
+
+  defp capture(socket, event, props) do
+    Phoenix.LiveView.push_event(socket, "posthog:capture", %{event: event, props: props})
   end
 
   @impl true

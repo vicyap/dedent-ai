@@ -51,6 +51,10 @@ if config_env() == :prod do
     ],
     secret_key_base: secret_key_base
 
+  config :dedent_ai, :posthog,
+    public_key: System.get_env("POSTHOG_PUBLIC_KEY"),
+    host: System.get_env("POSTHOG_HOST", "https://us.i.posthog.com")
+
   # ## SSL Support
   #
   # To get SSL working, you will need to add the `https` key

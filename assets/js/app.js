@@ -63,6 +63,16 @@ const flashCopied = (el) => {
   setTimeout(() => el.classList.remove("btn-success"), 1000)
 }
 
+const track = (event, props = {}) => {
+  if (window.posthog && typeof window.posthog.capture === "function") {
+    window.posthog.capture(event, props)
+  }
+}
+
+window.addEventListener("phx:posthog:capture", (e) => {
+  if (e.detail) track(e.detail.event, e.detail.props || {})
+})
+
 const hooks = {
   ...colocatedHooks,
   CopyToClipboard: {
@@ -74,6 +84,7 @@ const hooks = {
         const text = "value" in target ? target.value : target.textContent
         await copyText(text || "")
         flashCopied(this.el)
+        track("copy_plain", {output_chars: (text || "").length})
       })
     },
   },
@@ -85,8 +96,13 @@ const hooks = {
         if (!textEl || !htmlEl) return
 
         const text = "value" in textEl ? textEl.value : textEl.textContent
-        await copyRich(text || "", htmlEl.innerHTML || "")
+        const html = htmlEl.innerHTML || ""
+        await copyRich(text || "", html)
         flashCopied(this.el)
+        track("copy_formatted", {
+          output_chars: (text || "").length,
+          has_table: html.includes("<table"),
+        })
       })
     },
   },
@@ -95,6 +111,7 @@ const hooks = {
       this.el.addEventListener("click", async () => {
         await copyText(this.el.dataset.copyText || "")
         flashCopied(this.el)
+        track("insight_copied", {chars: (this.el.dataset.copyText || "").length})
       })
     },
   },
