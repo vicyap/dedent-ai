@@ -48,8 +48,8 @@ defmodule DedentAi.Text do
   def clean(text, opts) when is_binary(text) and is_list(opts) do
     text = if Keyword.get(opts, :filter_status, true), do: filter_status_lines(text), else: text
     lines = split_lines(text)
-    {lines, marker_line} = strip_first_terminal_marker(lines)
-    indent_width = common_indent_width(lines, marker_line)
+    {lines, marker_lines} = strip_paragraph_terminal_markers(lines)
+    indent_width = common_indent_width(lines, marker_lines)
 
     cleaned =
       lines
@@ -93,22 +93,32 @@ defmodule DedentAi.Text do
 
   defp collapse_blanks([line | rest], []), do: collapse_blanks(rest, [line])
 
-  defp strip_first_terminal_marker(lines) do
-    case Enum.find_index(lines, &(not blank?(&1))) do
-      nil ->
-        {lines, nil}
+  defp strip_paragraph_terminal_markers(lines) do
+    {reversed, markers, _state} =
+      lines
+      |> Enum.with_index()
+      |> Enum.reduce({[], MapSet.new(), :paragraph_start}, fn
+        {line, _idx}, {acc, markers, _state} when line == "" ->
+          {[line | acc], markers, :paragraph_start}
 
-      index ->
-        {line, marker_stripped?} =
-          lines
-          |> Enum.at(index)
-          |> strip_terminal_marker()
+        {line, idx}, {acc, markers, :paragraph_start} ->
+          if blank?(line) do
+            {[line | acc], markers, :paragraph_start}
+          else
+            {stripped, stripped?} = strip_terminal_marker(line)
+            markers = if stripped?, do: MapSet.put(markers, idx), else: markers
+            {[stripped | acc], markers, :inside}
+          end
 
-        lines = List.replace_at(lines, index, line)
-        marker_line = if marker_stripped?, do: index
+        {line, _idx}, {acc, markers, :inside} ->
+          if blank?(line) do
+            {[line | acc], markers, :paragraph_start}
+          else
+            {[line | acc], markers, :inside}
+          end
+      end)
 
-        {lines, marker_line}
-    end
+    {Enum.reverse(reversed), markers}
   end
 
   defp strip_terminal_marker(line) do
@@ -133,10 +143,10 @@ defmodule DedentAi.Text do
   defp trim_marker_gap(<<"\t", rest::binary>>), do: trim_marker_gap(rest)
   defp trim_marker_gap(rest), do: rest
 
-  defp common_indent_width(lines, marker_line) do
+  defp common_indent_width(lines, marker_lines) do
     lines
     |> Enum.with_index()
-    |> Enum.reject(fn {line, index} -> blank?(line) or index == marker_line end)
+    |> Enum.reject(fn {line, index} -> blank?(line) or MapSet.member?(marker_lines, index) end)
     |> Enum.map(fn {line, _index} -> leading_indent_width(line) end)
     |> minimum_indent_width()
   end

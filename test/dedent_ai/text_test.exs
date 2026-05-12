@@ -66,6 +66,36 @@ defmodule DedentAi.TextTest do
     assert Text.clean(input) == "Final note.\n\nNext message."
   end
 
+  test "strips ● from every paragraph-leading line across multi-turn pastes" do
+    input = """
+    ● First turn headline.
+
+      Body of the first turn.
+
+    ✻ Sautéed for 13s · 2 monitors still running
+
+    ✻ Claude resuming /loop wakeup (May 12 11:25am)
+
+    ● Second turn headline.
+
+      Body of the second turn.
+    """
+
+    output = Text.clean(input)
+
+    refute output =~ "● First"
+    refute output =~ "● Second"
+    assert output =~ "First turn headline."
+    assert output =~ "Second turn headline."
+    refute output =~ "Sautéed"
+  end
+
+  test "leaves a stray ● inside a paragraph untouched" do
+    input = "Opening line that mentions ● mid-sentence and keeps going.\n"
+
+    assert Text.clean(input) =~ "mentions ● mid-sentence"
+  end
+
   test "keeps ✻ status lines when filter_status is false" do
     input =
       "Final note.\n\n✻ Sautéed for 13s · 2 monitors still running\n\nNext message."
