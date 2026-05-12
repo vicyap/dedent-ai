@@ -58,4 +58,18 @@ defmodule DedentAi.TextTest do
 
     assert Text.clean(input) == input
   end
+
+  test "strips ✻ status lines by default and collapses the blank gap" do
+    input =
+      "Final note.\n\n✻ Sautéed for 13s · 2 monitors still running\n\n✻ Claude resuming /loop wakeup (May 12 11:25am)\n\nNext message."
+
+    assert Text.clean(input) == "Final note.\n\nNext message."
+  end
+
+  test "keeps ✻ status lines when filter_status is false" do
+    input =
+      "Final note.\n\n✻ Sautéed for 13s · 2 monitors still running\n\nNext message."
+
+    assert Text.clean(input, filter_status: false) =~ "Sautéed for 13s"
+  end
 end

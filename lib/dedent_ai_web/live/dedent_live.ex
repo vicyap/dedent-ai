@@ -8,13 +8,19 @@ defmodule DedentAiWeb.DedentLive do
     {:ok,
      socket
      |> assign(:output_view, :raw)
+     |> assign(:filter_status, true)
      |> assign_text("")}
   end
 
   @impl true
   def handle_event("update", %{"dedent_ai" => params}, socket) when is_map(params) do
     input = Map.get(params, "input", "")
-    {:noreply, assign_text(socket, input)}
+    filter_status = Map.get(params, "filter_status", "true") == "true"
+
+    {:noreply,
+     socket
+     |> assign(:filter_status, filter_status)
+     |> assign_text(input)}
   end
 
   def handle_event("update", _params, socket) do
@@ -76,7 +82,19 @@ defmodule DedentAiWeb.DedentLive do
           >
             <div class="flex h-12 items-center justify-between gap-3 border-b border-base-300 px-4">
               <label for={@form[:input].id} class="text-sm font-medium">Input</label>
-              <span class="text-xs tabular-nums text-base-content/60">{@input_chars} chars</span>
+              <div class="flex items-center gap-3">
+                <label class="flex items-center gap-2 text-xs text-base-content/70">
+                  <input type="hidden" name="dedent_ai[filter_status]" value="false" />
+                  <input
+                    type="checkbox"
+                    name="dedent_ai[filter_status]"
+                    value="true"
+                    checked={@filter_status}
+                    class="checkbox checkbox-xs"
+                  /> Strip status lines
+                </label>
+                <span class="text-xs tabular-nums text-base-content/60">{@input_chars} chars</span>
+              </div>
             </div>
             <textarea
               id={@form[:input].id}
@@ -198,7 +216,8 @@ defmodule DedentAiWeb.DedentLive do
   end
 
   defp assign_text(socket, input) do
-    output = Text.clean(input)
+    filter_status = Map.get(socket.assigns, :filter_status, true)
+    output = Text.clean(input, smart: true, filter_status: filter_status)
     markdown? = Text.looks_like_markdown?(output)
     insights = Insights.extract(input)
 

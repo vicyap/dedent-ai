@@ -36,9 +36,17 @@ defmodule DedentAi.Text do
 
   @doc """
   Cleans terminal text with optional wrapped-line repair.
+
+  Options:
+
+    * `:smart` / `:repair_wraps` — reflow wrapped Markdown lines (default true)
+    * `:filter_status` — drop Claude Code status lines like `✻ Sautéed for 13s…`
+      or `✻ Claude resuming…` and collapse the gap they leave behind
+      (default true)
   """
   @spec clean(binary(), keyword()) :: binary()
   def clean(text, opts) when is_binary(text) and is_list(opts) do
+    text = if Keyword.get(opts, :filter_status, true), do: filter_status_lines(text), else: text
     lines = split_lines(text)
     {lines, marker_line} = strip_first_terminal_marker(lines)
     indent_width = common_indent_width(lines, marker_line)
@@ -61,6 +69,29 @@ defmodule DedentAi.Text do
     |> String.replace("\r", "\n")
     |> String.split("\n", trim: false)
   end
+
+  defp filter_status_lines(text) do
+    text
+    |> split_lines()
+    |> Enum.reject(&status_line?/1)
+    |> collapse_blanks([])
+    |> Enum.reverse()
+    |> Enum.join("\n")
+  end
+
+  defp status_line?(line), do: String.match?(line, ~r/^\s*✻\s/u)
+
+  defp collapse_blanks([], acc), do: acc
+
+  defp collapse_blanks([line | rest], [prev | _] = acc) do
+    if blank?(line) and blank?(prev) do
+      collapse_blanks(rest, acc)
+    else
+      collapse_blanks(rest, [line | acc])
+    end
+  end
+
+  defp collapse_blanks([line | rest], []), do: collapse_blanks(rest, [line])
 
   defp strip_first_terminal_marker(lines) do
     case Enum.find_index(lines, &(not blank?(&1))) do
